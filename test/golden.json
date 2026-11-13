@@ -1,0 +1,552 @@
+{
+  "unixNow": 1767225600,
+  "cases": [
+    {
+      "name": "DeepSeek host is detected and queried with the key",
+      "hook": "buildBalanceRequest",
+      "args": [
+        {
+          "baseUrl": "https://api.deepseek.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {},
+          "state": null
+        }
+      ],
+      "expected": {
+        "method": "GET",
+        "path": "/user/balance",
+        "headers": {
+          "Authorization": "Bearer sk-fixture-key",
+          "Accept": "application/json"
+        },
+        "state": {
+          "kind": "deepseek",
+          "step": 0,
+          "probes": null
+        }
+      }
+    },
+    {
+      "name": "auto on an unknown host starts with New API",
+      "hook": "buildBalanceRequest",
+      "args": [
+        {
+          "baseUrl": "https://relay.example.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {},
+          "state": null
+        }
+      ],
+      "expected": {
+        "method": "GET",
+        "path": "/api/usage/token/",
+        "headers": {
+          "Authorization": "Bearer sk-fixture-key",
+          "Accept": "application/json"
+        },
+        "state": {
+          "kind": "newapi",
+          "step": 0,
+          "probes": [
+            "sub2api",
+            "oneapi"
+          ]
+        }
+      }
+    },
+    {
+      "name": "empty key fails the query",
+      "hook": "buildBalanceRequest",
+      "args": [
+        {
+          "baseUrl": "https://api.deepseek.com",
+          "credential": null,
+          "apiKey": "",
+          "config": {},
+          "state": null
+        }
+      ],
+      "expectedError": "channel key is empty"
+    },
+    {
+      "name": "New API usage leads to /api/status",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://relay.example.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {
+            "upstreamKind": "newapi"
+          },
+          "state": {
+            "kind": "newapi",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"code\":true,\"data\":{\"total_available\":2500000,\"unlimited_quota\":false}}"
+        }
+      ],
+      "expected": {
+        "next": {
+          "method": "GET",
+          "path": "/api/status",
+          "headers": {
+            "Authorization": "Bearer sk-fixture-key",
+            "Accept": "application/json"
+          }
+        },
+        "state": {
+          "kind": "newapi",
+          "step": 1,
+          "probes": null,
+          "quota": 2500000
+        }
+      }
+    },
+    {
+      "name": "New API quota converts with quota_per_unit",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://relay.example.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {
+            "upstreamKind": "newapi"
+          },
+          "state": {
+            "kind": "newapi",
+            "step": 1,
+            "probes": null,
+            "quota": 2500000
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"data\":{\"quota_per_unit\":500000}}"
+        }
+      ],
+      "expected": {
+        "amount": 5,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "auto falls through to sub2api after a New API 404",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://relay.example.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {},
+          "state": {
+            "kind": "newapi",
+            "step": 0,
+            "probes": [
+              "sub2api",
+              "oneapi"
+            ]
+          }
+        },
+        {
+          "status": 404,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "404 page not found"
+        }
+      ],
+      "expected": {
+        "next": {
+          "method": "GET",
+          "path": "/v1/usage",
+          "headers": {
+            "Authorization": "Bearer sk-fixture-key",
+            "Accept": "application/json"
+          }
+        },
+        "state": {
+          "kind": "sub2api",
+          "step": 0,
+          "probes": [
+            "oneapi"
+          ]
+        }
+      }
+    },
+    {
+      "name": "One API subscription leads to the usage window",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://oneapi.example.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {
+            "upstreamKind": "oneapi"
+          },
+          "state": {
+            "kind": "oneapi",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"hard_limit_usd\":20}"
+        }
+      ],
+      "expected": {
+        "next": {
+          "method": "GET",
+          "path": "/v1/dashboard/billing/usage?start_date=2025-09-24&end_date=2026-01-02",
+          "headers": {
+            "Authorization": "Bearer sk-fixture-key",
+            "Accept": "application/json"
+          }
+        },
+        "state": {
+          "kind": "oneapi",
+          "step": 1,
+          "probes": null,
+          "hard": 20
+        }
+      }
+    },
+    {
+      "name": "One API balance is hard limit minus usage",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://oneapi.example.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {
+            "upstreamKind": "oneapi"
+          },
+          "state": {
+            "kind": "oneapi",
+            "step": 1,
+            "probes": null,
+            "hard": 20
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"total_usage\":1250}"
+        }
+      ],
+      "expected": {
+        "amount": 7.5,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "sub2api remaining",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://sub2api.example.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {
+            "upstreamKind": "sub2api"
+          },
+          "state": {
+            "kind": "sub2api",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"balance\":100,\"remaining\":12.5,\"isValid\":true,\"unit\":\"USD\"}"
+        }
+      ],
+      "expected": {
+        "amount": 12.5,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "DeepSeek funded CNY wallet",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://api.deepseek.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {},
+          "state": {
+            "kind": "deepseek",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"is_available\":true,\"balance_infos\":[{\"currency\":\"USD\",\"total_balance\":\"0.00\"},{\"currency\":\"CNY\",\"total_balance\":\"110.50\"}]}"
+        }
+      ],
+      "expected": {
+        "amount": 110.5,
+        "currency": "CNY"
+      }
+    },
+    {
+      "name": "Moonshot international is USD",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://api.moonshot.ai",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {},
+          "state": {
+            "kind": "moonshot",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"code\":0,\"data\":{\"available_balance\":49.5},\"status\":true}"
+        }
+      ],
+      "expected": {
+        "amount": 49.5,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "SiliconFlow totalBalance",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://api.siliconflow.cn",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {},
+          "state": {
+            "kind": "siliconflow",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"code\":20000,\"data\":{\"totalBalance\":\"88.88\"}}"
+        }
+      ],
+      "expected": {
+        "amount": 88.88,
+        "currency": "CNY"
+      }
+    },
+    {
+      "name": "OpenRouter key limit",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://openrouter.ai/api",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {},
+          "state": {
+            "kind": "openrouter",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"data\":{\"limit\":100,\"limit_remaining\":74.5}}"
+        }
+      ],
+      "expected": {
+        "amount": 74.5,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "custom field over a divisor",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://relay.example.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {
+            "upstreamKind": "custom",
+            "customPath": "/api/wallet",
+            "customField": "data.quota",
+            "customDivisor": 500000
+          },
+          "state": {
+            "kind": "custom",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 200,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"data\":{\"quota\":1250000}}"
+        }
+      ],
+      "expected": {
+        "amount": 2.5,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "upstream error keeps status and message",
+      "hook": "parseBalance",
+      "args": [
+        {
+          "baseUrl": "https://api.deepseek.com",
+          "credential": null,
+          "apiKey": "sk-fixture-key",
+          "config": {},
+          "state": {
+            "kind": "deepseek",
+            "step": 0,
+            "probes": null
+          }
+        },
+        {
+          "status": 401,
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": "{\"error\":{\"message\":\"Authentication Fails\"}}"
+        }
+      ],
+      "expected": {
+        "error": "deepseek balance query /user/balance returned HTTP 401: Authentication Fails"
+      }
+    },
+    {
+      "name": "below the threshold disables",
+      "hook": "decide",
+      "args": [
+        {
+          "disableBelow": 5,
+          "enableAtOrAbove": 10,
+          "autoDisable": true,
+          "reenable": "balance"
+        },
+        "enabled",
+        null,
+        {
+          "amount": 4,
+          "currency": "USD"
+        }
+      ],
+      "expected": {
+        "keyStatus": "auto_disabled",
+        "notify": {
+          "en": "Upstream balance 4 USD is below the threshold 5 USD; key disabled",
+          "zh": "上游余额 4 USD 低于阈值 5 USD，已禁用该密钥"
+        }
+      }
+    },
+    {
+      "name": "recovered balance re-enables a low-balance key",
+      "hook": "decide",
+      "args": [
+        {
+          "disableBelow": 5,
+          "enableAtOrAbove": 10,
+          "autoDisable": true,
+          "reenable": "balance"
+        },
+        "auto_disabled",
+        "Insufficient balance",
+        {
+          "amount": 10,
+          "currency": "USD"
+        }
+      ],
+      "expected": {
+        "keyStatus": "enabled",
+        "notify": {
+          "en": "Upstream balance recovered to 10 USD; key enabled again",
+          "zh": "上游余额已恢复到 10 USD，已重新启用该密钥"
+        }
+      }
+    },
+    {
+      "name": "another disable reason is left alone",
+      "hook": "decide",
+      "args": [
+        {
+          "disableBelow": 5,
+          "enableAtOrAbove": 10,
+          "autoDisable": true,
+          "reenable": "balance"
+        },
+        "auto_disabled",
+        "status code 401",
+        {
+          "amount": 10,
+          "currency": "USD"
+        }
+      ],
+      "expected": {}
+    },
+    {
+      "name": "key with spaces is rejected",
+      "hook": "checkKey",
+      "args": [
+        {
+          "baseUrl": "",
+          "config": {}
+        },
+        "sk-a sk-b"
+      ],
+      "expected": {
+        "error": {
+          "en": "A key line must not contain spaces",
+          "zh": "密钥行不能包含空格"
+        }
+      }
+    }
+  ]
+}
