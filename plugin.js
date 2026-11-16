@@ -16,7 +16,7 @@ export const meta = {
   "apiVersion": 1,
   "key": "byaiden_upstream_balance",
   "name": { "en": "Upstream Balance", "zh": "上游余额监控" },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": { "name": "ByAiden", "url": "https://github.com/ByAiden" },
   "description": {
     "en": "OpenAI-compatible relay that reads upstream balances and disables or restores keys by threshold",

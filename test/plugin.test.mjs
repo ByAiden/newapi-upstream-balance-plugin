@@ -72,7 +72,7 @@ test("meta is a plain JSON literal the marketplace can read", () => {
   assert.ok(block, "meta block found");
   assert.deepEqual(JSON.parse(block[1]), meta);
   assert.equal(meta.apiVersion, 1);
-  assert.equal(meta.version, "1.0.0");
+  assert.equal(meta.version, "1.0.1");
   assert.match(meta.key, /^[a-z0-9]+_upstream_balance$/);
   assert.ok(meta.key.length <= 30);
   assert.equal(meta.channelTypes, undefined);
@@ -87,7 +87,7 @@ test("meta is a plain JSON literal the marketplace can read", () => {
 test("plugin key and author match the changelog and readme", () => {
   const changelog = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
   assert.match(changelog, new RegExp("plugin: " + meta.key + "\\n"));
-  assert.match(changelog, /version: 1\.0\.0\n/);
+  assert.match(changelog, new RegExp("version: " + meta.version.replaceAll(".", "\\.") + "\\n"));
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
   assert.ok(readme.includes(meta.key));
 });
